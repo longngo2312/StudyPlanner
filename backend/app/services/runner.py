@@ -3,7 +3,22 @@
 #currently uses a placeholder greedy algorithm for testing purposes
 
 import time
-from app.models import SolveRequest, SolveResult
+from app.models import SolveRequest, SolveResult, CompareRequest, CompareResult
+
+BRUTE_FORCE_LIMIT = 20  #max number of tasks for brute force algorithm
+
+def compare(req: CompareRequest) -> CompareResult:
+    results, skipped = [], {}
+    for name in ("dp", "greedy", "brute"):
+        if name == "brute" and len(req.tasks) > BRUTE_FORCE_LIMIT:
+            skipped[name] = f"{len(req.tasks)} tasks exceeds the brute force limit of {BRUTE_FORCE_LIMIT}"
+            continue
+        results.append(run(SolveRequest(tasks=req.tasks, capacity=req.capacity, algorithm=name)))
+
+    best = max((r.total_benefit for r in results), default=0.0)
+    for r in results:
+        r.quality = r.total_benefit / best if best > 0 else 1.0 #quality: each algorithm's result relative to the best found
+    return CompareResult(results=results, skipped=skipped, best_benefit=best)
 
 #[testing] function to solve the knapsack problem using a greedy algorithm
 def greedy(tasks, capacity):

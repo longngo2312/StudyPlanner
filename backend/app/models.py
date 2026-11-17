@@ -24,3 +24,20 @@ class SolveResult(BaseModel):
     total_time: int
     runtime_ms: float
     algorithm: str
+    
+class SolveResult(BaseModel):
+    selected_ids: list[str]
+    total_benefit: float
+    total_time: int
+    runtime_ms: float
+    algorithm: str
+    quality: float | None = None   #1.0 = matches the best result found
+
+class CompareRequest(BaseModel):
+    tasks: list[Task]
+    capacity: int = Field(ge=0)
+
+class CompareResult(BaseModel):
+    results: list[SolveResult]
+    skipped: dict[str, str] = {}   #algorithm + reason it was skipped
+    best_benefit: float
