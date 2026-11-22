@@ -4,6 +4,22 @@
 
 from typing import Literal
 from pydantic import BaseModel, Field
+from datetime import date
+
+class RawTask(BaseModel):
+    id: str
+    name: str
+    duration: int = Field(gt=0)
+    priority: int = Field(ge=1, le=5)
+    grade_weight: float = Field(ge=0, le=100)
+    deadline: date | None = None
+    course_id: str | None = None
+
+class PlanRequest(BaseModel):
+    tasks: list[RawTask]
+    capacity: int = Field(ge=0)
+    algorithm: Literal["dp", "greedy", "brute"] = "dp"
+    today: date | None = None   #for testing; defaults to the real date
 
 class Task(BaseModel):
     id: str
@@ -17,13 +33,6 @@ class SolveRequest(BaseModel):
     tasks: list[Task]
     capacity: int = Field(ge=0)
     algorithm: Literal["dp", "greedy", "brute"] = "dp"
-
-class SolveResult(BaseModel):
-    selected_ids: list[str]
-    total_benefit: float
-    total_time: int
-    runtime_ms: float
-    algorithm: str
     
 class SolveResult(BaseModel):
     selected_ids: list[str]
@@ -41,3 +50,24 @@ class CompareResult(BaseModel):
     results: list[SolveResult]
     skipped: dict[str, str] = {}   #algorithm + reason it was skipped
     best_benefit: float
+
+#classes for database
+class ProfileCreate(BaseModel):
+    name: str = Field(min_length=1)
+    capacity: int = Field(ge=0)
+
+class Profile(ProfileCreate):
+    id: int
+
+class StoredTask(RawTask):
+    completed: bool = False
+
+class PlanCreate(BaseModel):
+    algorithm: Literal["dp", "greedy", "brute"] = "dp"
+    today: date | None = None   # for testing
+
+class SavedPlan(BaseModel):
+    id: int
+    profile_id: int
+    created_at: str
+    result: SolveResult

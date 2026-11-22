@@ -1,11 +1,12 @@
 #app/main.py
 #entrypoint for the app (includes FastAPI app, CORS middleware, and API routes)
 
+
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.db import init_db
-from app.routes import plan
+from app.routes import plan, profiles
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -22,6 +23,7 @@ app.add_middleware(
 )
 
 app.include_router(plan.router)
+app.include_router(profiles.router)
 
 @app.get("/health")
 def health():
