@@ -51,7 +51,7 @@ class CompareResult(BaseModel):
     skipped: dict[str, str] = {}   #algorithm + reason it was skipped
     best_benefit: float
 
-#classes for database
+#database classes
 class ProfileCreate(BaseModel):
     name: str = Field(min_length=1)
     capacity: int = Field(ge=0)
@@ -64,10 +64,18 @@ class StoredTask(RawTask):
 
 class PlanCreate(BaseModel):
     algorithm: Literal["dp", "greedy", "brute"] = "dp"
-    today: date | None = None   # for testing
+    today: date | None = None   #for testing
 
 class SavedPlan(BaseModel):
     id: int
     profile_id: int
     created_at: str
     result: SolveResult
+    
+class TaskUpdate(BaseModel):
+    completed: bool
+
+class RescheduleRequest(BaseModel):
+    time_used: int = Field(default=0, ge=0)   #units already spent or lost (done + missed blocks)
+    algorithm: Literal["dp", "greedy", "brute"] = "dp"
+    today: date | None = None                 #for testing

@@ -3,12 +3,13 @@
 
 #create a profile (name + time budget), add tasks to it, then generate a plan 
 #generating a plan loads the profile's unfinished tasks, scores them, runs the chosen algorithm, and saves the result as JSON.
+#rescheduling: marks task complete (PATCH) then call /reschedule
 
 import sqlite3
 from fastapi import APIRouter, HTTPException
 from app.db import db
-from app.models import (Profile, ProfileCreate, RawTask, StoredTask,
-                        PlanCreate, SavedPlan, SolveRequest, SolveResult)
+from app.models import (Profile, ProfileCreate, RawTask, StoredTask, TaskUpdate,
+                        PlanCreate, RescheduleRequest, SavedPlan, SolveRequest, SolveResult)
 from app.services.scoring import score_tasks
 from app.services.runner import run, BRUTE_LIMIT
 
@@ -35,6 +36,20 @@ def _row_to_plan(row) -> SavedPlan:
         created_at=row["created_at"],
         result=SolveResult.model_validate_json(row["result_json"]),
     )
+
+def _generate_plan(conn, profile_id: int, algorithm: str, today, capacity: int) -> SavedPlan:
+    """Score the profile's unfinished tasks, solve, and save the result as a new plan."""
+    pending = _load_tasks(conn, profile_id, include_completed=False)
+    if algorithm == "brute" and len(pending) > BRUTE_LIMIT:
+        raise HTTPException(400, f"Brute force is limited to {BRUTE_LIMIT} tasks")
+
+    scored = score_tasks(pending, today)
+    result = run(SolveRequest(tasks=scored, capacity=capacity, algorithm=algorithm))
+    cur = conn.execute(
+        "INSERT INTO plans (profile_id, algorithm, result_json) VALUES (?, ?, ?)",
+        (profile_id, algorithm, result.model_dump_json()))
+    row = conn.execute("SELECT * FROM plans WHERE id = ?", (cur.lastrowid,)).fetchone()
+    return _row_to_plan(row)
 
 #profiles:
 @router.post("/profiles", response_model=Profile, status_code=201)
@@ -79,23 +94,25 @@ def list_tasks(profile_id: int):
         _require_profile(conn, profile_id)
         return _load_tasks(conn, profile_id)
 
+@router.patch("/profiles/{profile_id}/tasks/{task_id}", response_model=StoredTask)
+def update_task(profile_id: int, task_id: str, update: TaskUpdate):
+    with db() as conn:
+        _require_profile(conn, profile_id)
+        cur = conn.execute(
+            "UPDATE tasks SET completed = ? WHERE profile_id = ? AND id = ?",
+            (int(update.completed), profile_id, task_id))
+        if cur.rowcount == 0:
+            raise HTTPException(404, "Task not found")
+        row = conn.execute(
+            "SELECT * FROM tasks WHERE profile_id = ? AND id = ?", (profile_id, task_id)).fetchone()
+        return StoredTask(**dict(row))
+
 #plans
 @router.post("/profiles/{profile_id}/plans", response_model=SavedPlan, status_code=201)
 def create_plan(profile_id: int, req: PlanCreate):
     with db() as conn:
         profile = _require_profile(conn, profile_id)
-        pending = _load_tasks(conn, profile_id, include_completed=False)
-        if req.algorithm == "brute" and len(pending) > BRUTE_LIMIT:
-            raise HTTPException(400, f"Brute force is limited to {BRUTE_LIMIT} tasks")
-
-        scored = score_tasks(pending, req.today)
-        result = run(SolveRequest(tasks=scored, capacity=profile["capacity"],
-                                  algorithm=req.algorithm))
-        cur = conn.execute(
-            "INSERT INTO plans (profile_id, algorithm, result_json) VALUES (?, ?, ?)",
-            (profile_id, req.algorithm, result.model_dump_json()))
-        row = conn.execute("SELECT * FROM plans WHERE id = ?", (cur.lastrowid,)).fetchone()
-        return _row_to_plan(row)
+        return _generate_plan(conn, profile_id, req.algorithm, req.today, profile["capacity"])
 
 @router.get("/profiles/{profile_id}/plans", response_model=list[SavedPlan])
 def list_plans(profile_id: int):
@@ -112,3 +129,10 @@ def get_plan(plan_id: int):
         if row is None:
             raise HTTPException(404, "Plan not found")
         return _row_to_plan(row)
+
+@router.post("/profiles/{profile_id}/reschedule", response_model=SavedPlan, status_code=201)
+def reschedule(profile_id: int, req: RescheduleRequest):
+    with db() as conn:
+        profile = _require_profile(conn, profile_id)
+        remaining = max(profile["capacity"] - req.time_used, 0)
+        return _generate_plan(conn, profile_id, req.algorithm, req.today, remaining)
