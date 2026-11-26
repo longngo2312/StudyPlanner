@@ -59,8 +59,34 @@ class ProfileCreate(BaseModel):
 class Profile(ProfileCreate):
     id: int
 
+class ProfileUpdate(BaseModel):   #only the fields sent are changed
+    name: str | None = Field(default=None, min_length=1)
+    capacity: int | None = Field(default=None, ge=0)
+
 class StoredTask(RawTask):
     completed: bool = False
+
+class TaskUpdate(BaseModel):   #only the fields sent are changed
+    name: str | None = None
+    duration: int | None = Field(default=None, gt=0)
+    priority: int | None = Field(default=None, ge=1, le=5)
+    grade_weight: float | None = Field(default=None, ge=0, le=100)
+    deadline: date | None = None
+    course_id: str | None = None
+    completed: bool | None = None
+
+#auth
+class Credentials(BaseModel):
+    username: str = Field(min_length=3, max_length=50)
+    password: str = Field(min_length=8, max_length=128)
+
+class User(BaseModel):
+    id: int
+    username: str
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
 
 class PlanCreate(BaseModel):
     algorithm: Literal["dp", "greedy", "brute"] = "dp"
