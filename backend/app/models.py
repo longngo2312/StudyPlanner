@@ -5,6 +5,7 @@
 from typing import Literal
 from pydantic import BaseModel, Field
 from datetime import date
+from typing import Annotated
 
 class RawTask(BaseModel):
     id: str
@@ -102,3 +103,25 @@ class RescheduleRequest(BaseModel):
     time_used: int = Field(default=0, ge=0)   #units already spent or lost (done + missed blocks)
     algorithm: Literal["dp", "greedy", "brute"] = "dp"
     today: date | None = None                 #for testing
+    
+Count = Annotated[int, Field(ge=1, le=200)]
+Cap = Annotated[int, Field(ge=0, le=5000)]
+
+class BenchmarkRequest(BaseModel):
+    task_counts: list[Count] = Field(default=[10, 15, 20, 25, 30], min_length=1, max_length=10)
+    capacities: list[Cap] = Field(default=[30, 60, 90], min_length=1, max_length=10)
+    repeats: int = Field(default=5, ge=1, le=20)       #runs per configuration, averaged
+    brute_max_n: int = Field(default=15, ge=0, le=20)  #brute force only runs at or below n
+    seed: int = 42                                     #fixed seed for reproducible results
+
+class BenchmarkRow(BaseModel):
+    n: int
+    capacity: int
+    algorithm: str
+    avg_runtime_ms: float
+    avg_benefit: float
+    avg_quality: float
+    repeats: int
+
+class BenchmarkResult(BaseModel):
+    rows: list[BenchmarkRow]
