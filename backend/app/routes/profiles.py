@@ -7,13 +7,10 @@
 #rescheduling: marks task complete (PATCH) then call /reschedule
 #marking a task completed (PATCH) and generating a new plan re-optimizes the remaining work
 
-# app/routes/profiles.py
-# Profile, task, and saved-plan endpoints (SQLite).
-# Every route requires a logged-in user, and users can only access their own data.
-
 import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException, Response
+from datetime import date
 
 from app.db import db
 from app.models import (
@@ -29,10 +26,14 @@ from app.models import (
     SolveRequest,
     SolveResult,
     User,
+    CompareProfileRequest,
+    CompareRequest,
+    CompareResult,
 )
 from app.routes.auth import current_user
 from app.services.scoring import score_tasks
-from app.services.runner import run, BRUTE_LIMIT
+from app.services.runner import run, compare, BRUTE_LIMIT
+from app.services.datagen import PERSONAS, generate_tasks
 
 
 router = APIRouter(dependencies=[Depends(current_user)])
@@ -163,7 +164,7 @@ def _update(
     )
 
 
-# Profiles
+#profiles
 
 @router.post("/profiles", response_model=Profile, status_code=201)
 def create_profile(
@@ -235,7 +236,7 @@ def delete_profile(
     return Response(status_code=204)
 
 
-# Tasks
+#tasks
 
 @router.post(
     "/profiles/{profile_id}/tasks",
@@ -354,9 +355,7 @@ def delete_task(
 
     return Response(status_code=204)
 
-
-# Plans
-
+#plans
 @router.post(
     "/profiles/{profile_id}/plans",
     response_model=SavedPlan,
@@ -438,8 +437,7 @@ def delete_plan(
     return Response(status_code=204)
 
 
-# Rescheduling
-
+#rescheduling
 @router.post(
     "/profiles/{profile_id}/reschedule",
     response_model=SavedPlan,
@@ -465,3 +463,48 @@ def reschedule(
             req.today,
             remaining,
         )
+
+#compare algorithms on a saved profile
+@router.post("/profiles/{profile_id}/compare", response_model=CompareResult)
+def compare_profile(
+    profile_id: int,
+    req: CompareProfileRequest = CompareProfileRequest(),
+    user: User = Depends(current_user),
+):
+    """Run dp, greedy, and brute force on the profile's unfinished tasks. Saves nothing."""
+    with db() as conn:
+        profile = _require_profile(conn, profile_id, user)
+        pending = _load_tasks(conn, profile_id, include_completed=False)
+
+    scored = score_tasks(pending, req.today)
+    remaining = max(profile["capacity"] - req.time_used, 0)
+    return compare(CompareRequest(tasks=scored, capacity=remaining))
+
+
+#sample data
+@router.post("/seed", response_model=list[Profile], status_code=201)
+def seed_profiles(user: User = Depends(current_user)):
+    """Create the sample personas (with generated tasks) for the logged-in user.
+    Personas the user already has (matched by name) are skipped, so calling this twice is safe."""
+    created = []
+    today = date.today()   # real date, so the sample deadlines are upcoming
+    with db() as conn:
+        existing = {r["name"] for r in conn.execute(
+            "SELECT name FROM profiles WHERE user_id = ?", (user.id,))}
+        for i, persona in enumerate(PERSONAS):
+            if persona["name"] in existing:
+                continue
+            cur = conn.execute(
+                "INSERT INTO profiles (user_id, name, capacity) VALUES (?, ?, ?)",
+                (user.id, persona["name"], persona["capacity"]))
+            pid = cur.lastrowid
+            tasks = generate_tasks(persona["task_count"], seed=100 + i, today=today)
+            conn.executemany(
+                """INSERT INTO tasks
+                   (profile_id, id, name, duration, priority, grade_weight, deadline, course_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                [(pid, t.id, t.name, t.duration, t.priority, t.grade_weight,
+                  t.deadline.isoformat() if t.deadline else None, t.course_id)
+                 for t in tasks])
+            created.append(Profile(id=pid, name=persona["name"], capacity=persona["capacity"]))
+    return created

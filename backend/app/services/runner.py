@@ -8,6 +8,8 @@ from fastapi import HTTPException
 
 BRUTE_LIMIT = 20   #capping brute force since it is O(n * 2^n)
 
+from fastapi import HTTPException
+
 def run(req: SolveRequest) -> SolveResult:
     if req.algorithm == "brute" and len(req.tasks) > BRUTE_LIMIT:
         raise HTTPException(400, f"Brute force is limited to {BRUTE_LIMIT} tasks")
@@ -15,12 +17,15 @@ def run(req: SolveRequest) -> SolveResult:
     start = time.perf_counter()
     selected, benefit, used = fn(req.tasks, req.capacity)
     elapsed_ms = (time.perf_counter() - start) * 1000
+    chosen = set(selected)
     return SolveResult(
         selected_ids=selected,
         total_benefit=benefit,
         total_time=used,
         runtime_ms=elapsed_ms,
         algorithm=req.algorithm,
+        selected_tasks=[t for t in req.tasks if t.id in chosen],
+        unselected_tasks=[t for t in req.tasks if t.id not in chosen],
     )
 
 def compare(req: CompareRequest) -> CompareResult:

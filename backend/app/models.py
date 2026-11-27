@@ -42,7 +42,9 @@ class SolveResult(BaseModel):
     runtime_ms: float
     algorithm: str
     quality: float | None = None   #1.0 = matches the best result found
-
+    selected_tasks: list[Task] = Field(default_factory=list)
+    unselected_tasks: list[Task] = Field(default_factory=list)
+    
 class CompareRequest(BaseModel):
     tasks: list[Task]
     capacity: int = Field(ge=0)
@@ -125,3 +127,7 @@ class BenchmarkRow(BaseModel):
 
 class BenchmarkResult(BaseModel):
     rows: list[BenchmarkRow]
+
+class CompareProfileRequest(BaseModel):
+    time_used: int = Field(default=0, ge=0)   #units already spent or lost, same as /reschedule
+    today: date | None = None                 #for testing

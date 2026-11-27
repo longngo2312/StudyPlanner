@@ -9,10 +9,9 @@ from app.services.scoring import score_tasks
 
 #capacity is in 30-minute blocks: 45 hours = 90 blocks.
 PERSONAS = [
-    {"name": "Full-time Engineering Student", "weekly_hours": 45, "capacity": 90},
-    {"name": "Part-time Working Adult", "weekly_hours": 15, "capacity": 30},
+    {"name": "Full-time Engineering Student", "weekly_hours": 45, "capacity": 90, "task_count": 16},
+    {"name": "Part-time Working Adult", "weekly_hours": 15, "capacity": 30, "task_count": 10},
 ]
-
 REFERENCE_DATE = date(2026, 11, 30)   #fixed "today" so deadlines don't drift between uses
 
 def generate_courses(n: int = 40, seed: int = 42) -> list[dict]:
